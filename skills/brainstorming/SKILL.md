@@ -8,8 +8,9 @@ description: "You MUST use this before any creative work - creating features, bu
 Help turn ideas into fully formed designs and specs through natural collaborative dialogue.
 
 Start by classifying how much process the request needs, then work
-through your path: understand the context, refine the idea, present a
-design, and get your human partner's approval.
+through your path: understand the context, refine the idea, document
+the design at the appropriate depth, and get your human partner's
+approval.
 
 <HARD-GATE>
 Do NOT invoke any implementation skill, write any code, scaffold any
@@ -44,8 +45,8 @@ override it:
   one. No spec file, no implementation plan document.
 - **Architectural** — new projects, new subsystems, changes that
   restructure how components fit together or alter interfaces others
-  depend on. Follow the full process: questions, approaches, sectioned
-  design, written spec, then the writing-plans skill.
+  depend on. Follow the full process: questions, approaches, written
+  spec, one user review, then the writing-plans skill.
 
 When in doubt between two paths, take the heavier one. The ratchet is
 one-way: hidden complexity discovered mid-task upgrades the path —
@@ -96,10 +97,10 @@ your path and complete them in order.
 2. **Offer the visual companion just-in-time** — NOT upfront. The first time a question would genuinely be clearer shown than described, offer it then (its own message); on approval its browser tab opens for you. If no visual question ever arises, never offer it. See the Visual Companion section below.
 3. **Ask clarifying questions** — one at a time, understand purpose/constraints/success criteria
 4. **Propose 2-3 approaches** — with trade-offs and your recommendation
-5. **Present design** — in sections scaled to their complexity, get user approval after each section
-6. **Write design doc** — save to `docs/specs/YYYY-MM-DD-<topic>-design.md` and commit
-7. **Spec self-review** — quick inline check for placeholders, contradictions, ambiguity, scope (see below)
-8. **User reviews written spec** — ask user to review the spec file before proceeding
+5. **Write design doc** — save the complete design to `docs/specs/YYYY-MM-DD-<topic>-design.md`
+6. **Spec self-review** — quick inline check for placeholders, contradictions, ambiguity, scope (see below)
+7. **User reviews written spec** — ask for one review of the complete spec; revise until approved
+8. **Commit if wanted** — only after approval, and only when the user wants the spec tracked
 9. **Transition to implementation** — invoke writing-plans skill to create implementation plan
 
 ## Process Flow
@@ -116,11 +117,10 @@ digraph brainstorming {
     "Explore project context" [shape=box];
     "Ask clarifying questions" [shape=box];
     "Propose 2-3 approaches" [shape=box];
-    "Present design sections" [shape=box];
-    "User approves design?" [shape=diamond];
-    "Write design doc" [shape=box];
+    "Write complete design doc" [shape=box];
     "Spec self-review\n(fix inline)" [shape=box];
     "User reviews spec?" [shape=diamond];
+    "Commit spec if wanted" [shape=box];
     "Invoke writing-plans skill" [shape=doublecircle];
     "Hidden complexity? Upgrade path" [shape=box];
 
@@ -135,14 +135,12 @@ digraph brainstorming {
     "Hidden complexity? Upgrade path" -> "Classify: spike / bounded / architectural";
     "Explore project context" -> "Ask clarifying questions";
     "Ask clarifying questions" -> "Propose 2-3 approaches";
-    "Propose 2-3 approaches" -> "Present design sections";
-    "Present design sections" -> "User approves design?";
-    "User approves design?" -> "Present design sections" [label="no, revise"];
-    "User approves design?" -> "Write design doc" [label="yes"];
-    "Write design doc" -> "Spec self-review\n(fix inline)";
+    "Propose 2-3 approaches" -> "Write complete design doc";
+    "Write complete design doc" -> "Spec self-review\n(fix inline)";
     "Spec self-review\n(fix inline)" -> "User reviews spec?";
-    "User reviews spec?" -> "Write design doc" [label="changes requested"];
-    "User reviews spec?" -> "Invoke writing-plans skill" [label="approved"];
+    "User reviews spec?" -> "Write complete design doc" [label="changes requested"];
+    "User reviews spec?" -> "Commit spec if wanted" [label="approved"];
+    "Commit spec if wanted" -> "Invoke writing-plans skill";
 }
 ```
 
@@ -178,13 +176,13 @@ is the whole process.
 - Lead with your recommended option and explain why
 - YAGNI ruthlessly - remove unnecessary features from every approach and design
 
-**Presenting the design:**
+**Writing the design:**
 
-- Once you believe you understand what you're building, present the design
+- Once you believe you understand what you're building, write the complete design spec
 - Scale each section to its complexity: a few sentences if straightforward, up to 200-300 words if nuanced
-- Ask after each section whether it looks right so far
-- Cover: architecture, components, data flow, error handling, testing
-- Be ready to go back and clarify if something doesn't make sense
+- Cover: architecture, components, data flow, error handling, and testing
+- Do not present design sections one at a time for approval; the written spec is the single design review artifact
+- After self-review, ask the user to review the complete spec and be ready to revise anything that is unclear
 
 **Design for isolation and clarity:**
 
@@ -199,14 +197,14 @@ is the whole process.
 - Where existing code has problems that affect the work (e.g., a file that's grown too large, unclear boundaries, tangled responsibilities), include targeted improvements as part of the design - the way a good developer improves code they're working in.
 - Don't propose unrelated refactoring. Stay focused on what serves the current goal.
 
-## After the Design (architectural path)
+## After Exploration (architectural path)
 
 **Documentation:**
 
-- Write the validated design (spec) to `docs/specs/YYYY-MM-DD-<topic>-design.md`
-  - (User preferences for spec location override this default)
+- Write the complete design spec to `docs/specs/YYYY-MM-DD-<topic>-design.md`
+  - User preferences for the spec location override this default
 - Use elements-of-style:writing-clearly-and-concisely skill if available
-- Commit the design document to git
+- Do not commit the design document yet
 
 **Spec Self-Review:**
 After writing the spec document, look at it with fresh eyes:
@@ -216,14 +214,20 @@ After writing the spec document, look at it with fresh eyes:
 3. **Scope check:** Is this focused enough for a single implementation plan, or does it need decomposition?
 4. **Ambiguity check:** Could any requirement be interpreted two different ways? If so, pick one and make it explicit.
 
-Fix any issues inline. No need to re-review — just fix and move on.
+Fix any issues inline, then move directly to the user review gate. Do not add a separate section-by-section review.
 
 **User Review Gate:**
-After the spec review loop passes, ask the user to review the written spec before proceeding:
+After self-review, ask the user to review the complete written spec:
 
-> "Spec written and committed to `<path>`. Please review it and let me know if you want to make any changes before we start writing out the implementation plan."
+> "Spec written to `<path>`. Please review it and let me know if you want any changes before we write the implementation plan."
 
-Wait for the user's response. If they request changes, make them and re-run the spec review loop. Only proceed once the user approves.
+Wait for the user's response. If they request changes, make them, re-run the self-review, and ask them to review the updated spec. Only proceed once the user approves.
+
+**After Approval:**
+
+- Commit the design document only if the user wants it committed and it belongs in version control
+- If the user prefers the spec uncommitted or the file is intentionally gitignored, leave it that way
+- A design-doc commit is optional and is never a prerequisite for planning
 
 **Implementation:**
 
