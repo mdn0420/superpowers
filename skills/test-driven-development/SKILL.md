@@ -9,24 +9,7 @@ description: Use when implementing any feature or bugfix, before writing impleme
 
 Write the test first. Watch it fail. Write minimal code to pass.
 
-**Core principle:** If you didn't watch the test fail, you don't know if it tests the right thing.
-
-**Violating the letter of the rules is violating the spirit of the rules.**
-
-## When to Use
-
-**Always:**
-- New features
-- Bug fixes
-- Refactoring
-- Behavior changes
-
-**Exceptions (ask your human partner):**
-- Throwaway prototypes
-- Generated code
-- Configuration files
-
-Thinking "skip TDD just this once"? Stop. That's rationalization.
+**Core principle:** If you didn't watch the test fail, you don't know if it tests the right thing. **Violating the letter of the rules is violating the spirit of the rules.**
 
 ## The Iron Law
 
@@ -34,61 +17,40 @@ Thinking "skip TDD just this once"? Stop. That's rationalization.
 NO PRODUCTION CODE WITHOUT A FAILING TEST FIRST
 ```
 
-Write code before the test? Delete it. Start over.
+Applies to features, bugfixes, refactors, and behavior changes. Throwaway prototypes, generated code, and config files are exceptions your human partner grants — ask, don't assume.
 
-**No exceptions:**
-- Don't keep it as "reference"
-- Don't "adapt" it while writing tests
-- Don't look at it
-- Delete means delete
+Already wrote production code for this change? Tell your human partner and get their go-ahead to discard it, then start from the test. Put the old version where you cannot read it — stash it, close the file — and implement fresh from what the test demands. Code you can still see is code you will adapt, and adapting it is testing after.
 
-Implement fresh from tests. Period.
+## Seams: Decide Where Tests Go
+
+A **seam** is the public boundary you test at: the interface where you observe behavior without reaching inside. Tests live at seams, never against internals.
+
+A seam is a boundary, not an inventory. Listing every exported name is not a seam list — that is the coverage mandate wearing a new word. Name the few boundaries where behavior worth pinning crosses, and say out loud which ones you are choosing not to test.
+
+**Before writing any test, write down the seams under test and confirm them with your human partner.** Ask: "What's the public interface here, and which seams should we test?" No test is written at an unconfirmed seam. You cannot test everything, and testing everything evenly drains effort away from the code that matters — agreeing the seams up front is what lands your testing on critical paths and complex logic instead of on every symbol you happened to touch.
+
+**The bar is behavior, not coverage.** A test earns its place by pinning something a user or caller depends on. A new function is not a reason to write a test; a getter, a pass-through, or a constructor that only assigns earns one when it validates, normalizes, defaults, derives, or causes a side effect — otherwise assert the first consumer-visible result that depends on it.
 
 ## Red-Green-Refactor
 
-```dot
-digraph tdd_cycle {
-    rankdir=LR;
-    red [label="RED\nWrite failing test", shape=box, style=filled, fillcolor="#ffcccc"];
-    verify_red [label="Verify fails\ncorrectly", shape=diamond];
-    green [label="GREEN\nMinimal code", shape=box, style=filled, fillcolor="#ccffcc"];
-    verify_green [label="Verify passes\nAll green", shape=diamond];
-    refactor [label="REFACTOR\nClean up", shape=box, style=filled, fillcolor="#ccccff"];
-    next [label="Next", shape=ellipse];
+Inside the agreed seams: one test, one implementation, then repeat. Each test is a tracer bullet that responds to what the last cycle taught you.
 
-    red -> verify_red;
-    verify_red -> green [label="yes"];
-    verify_red -> red [label="wrong\nfailure"];
-    green -> verify_green;
-    verify_green -> refactor [label="yes"];
-    verify_green -> green [label="no"];
-    refactor -> verify_green [label="stay\ngreen"];
-    verify_green -> next;
-    next -> red;
-}
-```
-
-### RED - Write Failing Test
-
-Write one minimal test showing what should happen.
+### RED - Write One Failing Test
 
 <Good>
 ```typescript
 test('retries failed operations 3 times', async () => {
   let attempts = 0;
   const operation = () => {
-    attempts++;
-    if (attempts < 3) throw new Error('fail');
+    if (++attempts < 3) throw new Error('fail');
     return 'success';
   };
 
-  const result = await retryOperation(operation);
-
-  expect(result).toBe('success');
+  expect(await retryOperation(operation)).toBe('success');
   expect(attempts).toBe(3);
 });
 ```
-Clear name, tests real behavior, one thing
+Clear name, tests real behavior at the seam, one thing
 </Good>
 
 <Bad>
@@ -102,46 +64,30 @@ test('retry works', async () => {
   expect(mock).toHaveBeenCalledTimes(3);
 });
 ```
-Vague name, tests mock not code
+Vague name, asserts on the mock instead of the code
 </Bad>
 
-**Requirements:**
-- One behavior
-- Clear name
-- Real code (no mocks unless unavoidable)
+**Requirements:** one behavior ("and" in the name? split it), a name that describes that behavior, real code, and an expected value derived independently of the code under test.
 
 ### Verify RED - Watch It Fail
 
-**MANDATORY. Never skip.**
+**MANDATORY. Never skip.** Run the project's test command against the new test file. Confirm it fails, and that the failure message is the one you predicted.
 
-```bash
-npm test path/to/test.test.ts
-```
-
-Confirm:
-- Test fails (not errors)
-- Failure message is expected
-- Fails because feature missing (not typos)
-
-**Test passes?** You're testing existing behavior. Fix test.
-
-**Test errors?** Fix error, re-run until it fails correctly.
+| What you see | What it means | Do |
+|---|---|---|
+| Test passes | You're testing behavior that already exists | Fix the test to pin the new behavior — or drop it, it pins nothing |
+| Test errors (import, syntax, setup) | An error is not a real failure | Fix the error, re-run until it fails on the assertion |
+| Fails for a different reason than predicted | The test isn't measuring what you think | Back to RED. Fix and re-run until the message matches |
 
 ### GREEN - Minimal Code
-
-Write simplest code to pass the test.
 
 <Good>
 ```typescript
 async function retryOperation<T>(fn: () => Promise<T>): Promise<T> {
-  for (let i = 0; i < 3; i++) {
-    try {
-      return await fn();
-    } catch (e) {
-      if (i === 2) throw e;
-    }
+  for (let i = 0; i < 2; i++) {
+    try { return await fn(); } catch { /* retry */ }
   }
-  throw new Error('unreachable');
+  return fn();
 }
 ```
 Just enough to pass
@@ -151,147 +97,65 @@ Just enough to pass
 ```typescript
 async function retryOperation<T>(
   fn: () => Promise<T>,
-  options?: {
-    maxRetries?: number;
-    backoff?: 'linear' | 'exponential';
-    onRetry?: (attempt: number) => void;
-  }
-): Promise<T> {
-  // YAGNI
-}
+  options?: { maxRetries?: number; backoff?: 'linear' | 'exponential' }
+): Promise<T> { /* YAGNI */ }
 ```
-Over-engineered
+Over-engineered for tests that don't exist yet
 </Bad>
 
-Don't add features, refactor other code, or "improve" beyond the test.
+Write only what this test demands. Leave other code alone.
 
 ### Verify GREEN - Watch It Pass
 
-**MANDATORY.**
+**MANDATORY.** Run the project's test command.
 
-```bash
-npm test path/to/test.test.ts
-```
-
-Confirm:
-- Test passes
-- Other tests still pass
-- Output pristine (no errors, warnings)
-
-**Test fails?** Fix code, not test.
-
-**Other tests fail?** Fix now.
+Confirm this test passes, every other test still passes, and the output is pristine — no errors, no warnings. Test still fails? Fix the code, not the test. Other tests fail? Fix them now.
 
 ### REFACTOR - Clean Up
 
-After green only:
-- Remove duplication
-- Improve names
-- Extract helpers
+Green is what buys you this step. Remove duplication, improve names, extract helpers — the tests you just wrote are what make it safe. Stay green, add no behavior. Then write the next failing test.
 
-Keep tests green. Don't add behavior.
+## Anti-Patterns
 
-### Repeat
-
-Next failing test for next feature.
+- **Horizontal slicing** — writing all the tests first, then all the implementation. Bulk tests verify *imagined* behavior: you pin the shape of things instead of user-facing behavior, and you commit to test structure before you understand the implementation. Work in **vertical slices**: one test, one implementation, repeat.
+- **Tautological** — the assertion recomputes the expected value the way the code does, so it passes by construction and can never disagree with the code. Expected values come from an independent source of truth: a known-good literal, a worked example, the spec.
+- **Implementation-coupled** — mocks internal collaborators, tests private methods, or verifies through a side channel (querying the database instead of using the interface). The tell: the test breaks when you refactor but behavior hasn't changed.
 
 ## Good Tests
 
-| Quality | Good | Bad |
-|---------|------|-----|
-| **Minimal** | One thing. "and" in name? Split it. | `test('validates email and domain and whitespace')` |
-| **Clear** | Name describes behavior | `test('test1')` |
-| **Shows intent** | Demonstrates desired API | Obscures what code should do |
-
-When writing or changing any test, read [writing-good-tests.md](writing-good-tests.md) for the rules that keep tests honest:
-- Name the production change that would make the test fail — before writing it
-- Assert on real behavior, never on mock behavior
-- Keep test-only code in test utilities, out of production classes
-- Understand a dependency's side effects before mocking it
+When writing or changing any test, read [writing-good-tests.md](writing-good-tests.md) for the rules that keep tests honest: naming the break each test catches, deriving expectations independently, asserting on real behavior rather than on mocks, keeping test-only code out of production classes, and running the mutation check before you finish.
 
 ## Common Rationalizations
 
 | Excuse | Reality |
 |--------|---------|
-| "Too simple to test" | Simple code breaks. Test takes 30 seconds. |
-| "I'll test after" | Tests written after pass immediately — which proves nothing. They may test the wrong thing, test the implementation instead of the behavior, or miss the edge case you forgot. You never watched it fail, so you never proved it can catch the bug. Test-first forces that failure. |
-| "Tests after achieve same goals (spirit not ritual)" | Tests-after answer "what does this do?"; tests-first answer "what should this do?" Tests written after are biased by the code you already wrote — you verify the cases you remembered, not the ones you'd have discovered. Coverage without proof the tests work. |
-| "Already manually tested" | Manual testing is ad-hoc: no record of what you covered, no way to re-run it when the code changes, easy to forget cases under pressure. "Worked when I tried it" ≠ comprehensive. Automated tests run the same way every time. |
-| "Deleting X hours is wasteful" | Sunk cost fallacy — that time is already spent either way. The real choice: rewrite with TDD (high confidence) vs. keep it and bolt tests on after (low confidence, likely bugs). Keeping code you can't trust is the waste. |
-| "Keep as reference, write tests first" | You'll adapt it. That's testing after. Delete means delete. |
-| "Need to explore first" | Fine. Throw away exploration, start with TDD. |
-| "Test hard = design unclear" | Listen to test. Hard to test = hard to use. |
-| "TDD will slow me down" | TDD IS the pragmatic path: catches bugs before commit, prevents regressions, lets you refactor without fear. "Pragmatic" shortcuts mean debugging in production — slower, not faster. |
-| "Manual test faster" | Manual doesn't prove edge cases. You'll re-test every change. |
-| "Existing code has no tests" | You're improving it. Add tests for existing code. |
+| "I'll test after" | Tests written after pass immediately — which proves nothing. You never watched it fail, so you never proved it can catch the bug. Test-first forces that failure. |
+| "Tests after achieve the same goals (spirit not ritual)" | Tests-after answer "what does this do?"; tests-first answer "what should this do?" Tests written after are biased by the code you already wrote — you verify the cases you remembered, not the ones you'd have discovered. |
+| "Deleting X hours of work is wasteful" | Sunk cost — that time is spent either way. The real choice: rewrite with TDD (high confidence) vs. bolt tests onto code you can't trust (low confidence, likely bugs). |
+| "Restarting from the test doesn't fit the deadline" | The deadline is almost always on shipping, not on merging. Demo or ship from the branch you already have, and restart from the test for what actually lands. |
+| "I'll write the tests now and implement after" | Horizontal slicing. You'd be pinning imagined behavior before you understand the implementation. One test, then its implementation. |
+| "This function is new, so it needs a test" | Coverage is not the bar. The bar is a behavior at an agreed seam that a caller depends on. |
+| "Need to explore first" | Fine. Explore, then throw the exploration away and start from the test. |
+| "I'll keep the old version alongside for reference" | You will adapt it, and adapting is testing after. Stash it where you cannot read it. |
+| "It's a named seam, so it needs a test even if it's a pass-through" | Naming a member did not make it a boundary. Pin the behavior that depends on it. |
 
-## Red Flags - STOP and Start Over
-
-- Code before test
-- Test after implementation
-- Test passes immediately
-- Can't explain why test failed
-- Tests added "later"
-- Rationalizing "just this once"
-- "I already manually tested it"
-- "Tests after achieve the same purpose"
-- "It's about spirit not ritual"
-- "Keep as reference" or "adapt existing code"
-- "Already spent X hours, deleting is wasteful"
-- "TDD is dogmatic, I'm being pragmatic"
-- "This is different because..."
-
-**All of these mean: Delete code. Start over with TDD.**
-
-## Example: Bug Fix
-
-**Bug:** Empty email accepted
-
-**RED**
-```typescript
-test('rejects empty email', async () => {
-  const result = await submitForm({ email: '' });
-  expect(result.error).toBe('Email required');
-});
-```
-
-**Verify RED**
-```bash
-$ npm test
-FAIL: expected 'Email required', got undefined
-```
-
-**GREEN**
-```typescript
-function submitForm(data: FormData) {
-  if (!data.email?.trim()) {
-    return { error: 'Email required' };
-  }
-  // ...
-}
-```
-
-**Verify GREEN**
-```bash
-$ npm test
-PASS
-```
-
-**REFACTOR**
-Extract validation for multiple fields if needed.
+Any of these means: stop, and restart this cycle from the test.
 
 ## Verification Checklist
 
 Before marking work complete:
 
-- [ ] Every new function/method has a test
+- [ ] Seams confirmed with your human partner before any test was written
+- [ ] Every agreed seam has a test
+- [ ] Every test pins a behavior a user or caller depends on — none exists because a symbol is public
+- [ ] One test, one implementation, per cycle — no batch of tests written ahead of the code
 - [ ] Watched each test fail before implementing
-- [ ] Each test failed for expected reason (feature missing, not typo)
+- [ ] Each test failed for the predicted reason (behavior missing, not a typo)
 - [ ] Wrote minimal code to pass each test
-- [ ] All tests pass
-- [ ] Output pristine (no errors, warnings)
-- [ ] Tests use real code (mocks only if unavoidable)
-- [ ] Edge cases and errors covered
+- [ ] Every expected value derived independently of the code under test
+- [ ] All tests pass, output pristine (no errors, warnings)
+- [ ] Tests use real code (mocks only at system boundaries)
+- [ ] Edge cases and error paths covered at the agreed seams
 
 Can't check all boxes? You skipped TDD. Start over.
 
@@ -300,21 +164,11 @@ Can't check all boxes? You skipped TDD. Start over.
 | Problem | Solution |
 |---------|----------|
 | Don't know how to test | Write wished-for API. Write assertion first. Ask your human partner. |
+| Don't know where the seam is | Ask your human partner. Unconfirmed seam, no test. |
 | Test too complicated | Design too complicated. Simplify interface. |
 | Must mock everything | Code too coupled. Use dependency injection. |
 | Test setup huge | Extract helpers. Still complex? Simplify design. |
 
 ## Debugging Integration
 
-Bug found? Write failing test reproducing it. Follow TDD cycle. Test proves fix and prevents regression.
-
-Never fix bugs without a test.
-
-## Final Rule
-
-```
-Production code → test exists and failed first
-Otherwise → not TDD
-```
-
-No exceptions without your human partner's permission.
+Bug found? Write one failing test at the seam that reproduces it, then follow the cycle. The test proves the fix and prevents the regression. Never fix bugs without a test.
