@@ -7,9 +7,26 @@ description: Use when you have a spec or requirements for a multi-step task, bef
 
 ## Overview
 
-Write comprehensive implementation plans assuming the engineer has zero context for our codebase and questionable taste. Document everything they need to know: which files to touch for each task, code, testing, docs they might need to check, how to test it. Give them the whole plan as bite-sized tasks. DRY. YAGNI. TDD. Frequent commits.
+Write comprehensive implementation plans assuming the engineer has zero context for our codebase and questionable taste. Document everything they need to know: which files to touch for each task, code, testing, docs they might need to check, how to test it. Give them the whole plan as bite-sized tasks. DRY. YAGNI. Frequent commits.
 
 Assume they are a skilled developer, but know almost nothing about our toolset or problem domain. Assume they don't know good test design very well.
+
+**REQUIRED SUB-SKILL:** Use superpowers:test-driven-development. You write the
+tests that go into this plan, so its rules for test quality bind you: one
+behavior per test, a name that says which behavior, expected values derived
+independently of the code under test, and assertions on real behavior rather
+than on mocks. Read its writing-good-tests.md before writing a task's test code.
+
+**A plan is not horizontal slicing.** That skill names "all the tests first,
+then all the implementation" an anti-pattern, and this skill has you write every
+task's test code up front. The difference is that a plan is a design artifact,
+not a commit — the executor still works one vertical slice at a time, one test
+and its implementation per cycle. What keeps this honest is that **plan-supplied
+tests are not sacred.** The executor watches each one fail before implementing
+it, and the TDD skill's Verify RED table still governs: a test that passes gets
+fixed to pin the new behavior or dropped, and one that fails for an unpredicted
+reason goes back to RED. Your test code is a strong starting point, not a fixed
+artifact.
 
 **Announce at start:** "I'm using the writing-plans skill to create the implementation plan."
 
@@ -49,6 +66,7 @@ independently testable deliverable.
 - "Run it to make sure it fails" - step
 - "Implement the minimal code to make the test pass" - step
 - "Run the tests and make sure they pass" - step
+- "Refactor while green, or note that nothing needs it" - step
 - "Commit" - step
 
 ## Plan Document Header
@@ -58,7 +76,7 @@ independently testable deliverable.
 ```markdown
 # [Feature Name] Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task, and superpowers:test-driven-development for the cycle each task's steps encode — including watching every test in this plan fail before implementing it. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** [One sentence describing what this builds]
 
@@ -81,6 +99,20 @@ include this section.]
 
 ## Task Structure
 
+Each task names the seams its tests live at. A seam is the public boundary where
+you observe behavior without reaching inside — a boundary, not an inventory.
+Listing every exported name is a coverage mandate wearing a new word. Name the
+few boundaries where behavior worth pinning crosses, and name what you are
+choosing not to test. The `NOT tested:` line is required, not optional: it is
+what keeps the block from decaying back into a symbol checklist.
+
+A member that only hands back what it was given is not a seam — a getter over
+an assigned field, a pass-through, a constructor that just assigns. It becomes
+one only when it validates, normalizes, defaults, derives, or causes a side
+effect: a count computed from the config is derived and earns a test; a path
+stored and returned unchanged is not. Pin those through the first
+consumer-visible result that depends on them, never with a test of their own.
+
 ````markdown
 ### Task N: [Component Name]
 
@@ -88,6 +120,11 @@ include this section.]
 - Create: `exact/path/to/file.py`
 - Modify: `exact/path/to/existing.py:123-145`
 - Test: `tests/exact/path/to/test.py`
+
+**Seams under test:**
+- `parseConfig(path)` — public entry; pins defaulting and error paths
+- NOT tested: `.source` — returns the constructor argument unchanged; pinned through `parseConfig`'s result
+- NOT tested: `_normalizeKey` — internal, covered through `parseConfig`
 
 **Interfaces:**
 - Consumes: [what this task uses from earlier tasks — exact signatures]
@@ -120,7 +157,12 @@ def function(input):
 Run: `pytest tests/path/test.py::test_name -v`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 5: Refactor while green**
+
+Remove duplication, improve names. Stay green, add no behavior. Nothing to clean
+up? Say so and move on — this is a checkpoint, not a mandate to change code.
+
+- [ ] **Step 6: Commit**
 
 ```bash
 git add tests/path/test.py src/path/file.py
@@ -148,13 +190,15 @@ After writing the complete plan, look at the spec with fresh eyes and check the 
 
 **3. Type consistency:** Do the types, method signatures, and property names you used in later tasks match what you defined in earlier tasks? A function called `clearLayers()` in Task 3 but `clearFullLayers()` in Task 7 is a bug.
 
+**4. Test value:** Does every test you wrote pin a behavior a user or caller depends on? Delete any that exists only because a symbol is new or public — a getter, a pass-through, or a constructor that only assigns earns a test when it validates, normalizes, defaults, derives, or causes a side effect. Check that each task's tests sit at the seams that task declared.
+
 If you find issues, fix them inline. No need to re-review — just fix and move on. If you find a spec requirement with no task, add the task.
 
 ## Execution Handoff
 
 After saving the plan, offer execution choice:
 
-**"Plan complete and saved to `docs/plans/<filename>.md`. Two execution options:**
+**"Plan complete and saved to `docs/plans/<filename>.md`. Seams under test are listed per task — flag any you'd draw differently. Two execution options:**
 
 **1. Subagent-Driven (recommended)** - I dispatch a fresh subagent per task, review between tasks, fast iteration
 
